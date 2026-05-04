@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+
+  honeypot:
+    build:
+      context: .
+      dockerfile: Dockerfile.honeypot
+    container_name: delilah-honeypot
+    restart: unless-stopped
+    ports:
+      - "9200:9200"
+    volumes:
+      - db-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - DB_PATH=/app/data/honeypot_logs.db
+    networks:
+      - delilah-net
+
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.monitor
+    container_name: delilah-monitor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - db-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - DB_PATH=/app/data/honeypot_logs.db
+    depends_on:
+      - honeypot
+    networks:
+      - delilah-net
+
+volumes:
+  db-data:
+    driver: local
+
+networks:
+  delilah-net:
+    driver: bridge
