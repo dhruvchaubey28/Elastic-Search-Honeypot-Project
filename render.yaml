@@ -30,16 +30,3 @@ services:
       - key: ALERT_COOLDOWN_SECONDS
         value: 600
 
-
-  # ── Dashboard Service ──
-  - type: web
-    name: delilah-monitor
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python monitor.py
-    plan: free
-    healthCheckPath: /health
-
-    envVars:
-      - key: DB_PATH
-        value: honeypot_logs.db

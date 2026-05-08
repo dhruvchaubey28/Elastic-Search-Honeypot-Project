@@ -594,7 +594,39 @@ def make_app():
 
 
 if __name__ == "__main__":
-    app = make_app()
+
+    from monitor import DashboardHandler, StatsHandler, ExportHandler
+
+    app = tornado.web.Application([
+
+        # Health
+        (r"/health", HealthHandler),
+
+        # Honeypot
+        (r"/", FakeElasticsearchHandler),
+        (r"/_cat/indices", FakeElasticsearchHandler),
+        (r"/_cluster/health", FakeElasticsearchHandler),
+        (r"/_nodes", FakeElasticsearchHandler),
+        (r"/_mapping", FakeElasticsearchHandler),
+        (r"/_search", AttackHandler),
+
+        # Fake logins
+        (r"/login", FakeLoginHandler),
+        (r"/kibana", FakeLoginHandler),
+        (r"/kibana/login", FakeLoginHandler),
+        (r"/app/kibana", FakeLoginHandler),
+
+        # Dashboard
+        (r"/dashboard", DashboardHandler),
+        (r"/stats", StatsHandler),
+        (r"/export", ExportHandler),
+
+        # Catch all
+        (r"/.*", AttackHandler),
+    ])
+
     app.listen(HONEYPOT_PORT)
-    print(f"🍯 Delilah Honeypot running on port {HONEYPOT_PORT}")
+
+    print(f"🍯 Delilah running on port {HONEYPOT_PORT}")
+
     tornado.ioloop.IOLoop.current().start()
