@@ -592,6 +592,11 @@ def make_app():
         (r"/.*",            AttackHandler),   # catch-all
     ])
 
+class FaviconHandler(tornado.web.RequestHandler):
+
+    def get(self):
+        self.set_status(204)
+        self.finish()
 
 if __name__ == "__main__":
 
@@ -620,7 +625,8 @@ if __name__ == "__main__":
         (r"/dashboard", DashboardHandler),
         (r"/stats", StatsHandler),
         (r"/export", ExportHandler),
-
+        
+        (r"/favicon.ico", FaviconHandler),
         # Catch all
         (r"/.*", AttackHandler),
     ])
