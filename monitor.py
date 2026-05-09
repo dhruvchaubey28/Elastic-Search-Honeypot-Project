@@ -1,6 +1,6 @@
 import tornado.ioloop
 import tornado.web
-import psycopg2
+import psycopg
 import json
 import csv
 import io
@@ -12,7 +12,7 @@ MONITOR_PORT = int(os.environ.get("PORT", 8080))
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-db_conn = psycopg2.connect(DATABASE_URL)
+db_conn = psycopg.connect(DATABASE_URL)
 db_conn.autocommit = True
 
 db_cursor = db_conn.cursor()

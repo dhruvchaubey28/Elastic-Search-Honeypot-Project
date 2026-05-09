@@ -1,7 +1,7 @@
 import tornado.ioloop
 import tornado.web
 import tornado.httpclient
-import psycopg2
+import psycopg
 import datetime
 import smtplib
 import matplotlib.pyplot as plt
@@ -41,7 +41,7 @@ def should_send_alert(ip):
 # ===== Database Setup =====
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-db_conn = psycopg2.connect(DATABASE_URL)
+db_conn = psycopg.connect(DATABASE_URL)
 db_conn.autocommit = True
 
 db_cursor = db_conn.cursor()
