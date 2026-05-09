@@ -100,35 +100,35 @@ class StatsHandler(tornado.web.RequestHandler):
 
         # Geo points
         db_cursor.execute("""
-            SELECT lat, lon, source_ip, event_type, country
-            FROM events WHERE lat IS NOT NULL AND lon IS NOT NULL
+          SELECT lat, lon, source_ip, event_type, country
+          FROM events WHERE lat IS NOT NULL AND lon IS NOT NULL
         """)
         geo_points = [
-    {
+        {
         "lat": float(r[0]),
         "lon": float(r[1]),
         "ip": str(r[2]),
         "type": str(r[3]),
         "country": str(r[4])
-    }
-    for r in db_cursor.fetchall()
-]
-      self.set_header("Content-Type", "application/json")
+        }
+        for r in db_cursor.fetchall()
+        ]
+        self.set_header("Content-Type", "application/json")
 
-      response = {
-          "total_events": int(total_events),
-          "total_attacks": int(total_attacks),
-          "top_ip": str(top_ip),
-          "top_endpoint": str(top_endpoint),
-          "cred_count": int(cred_count),
-          "hourly": hourly,
-          "types": types,
-          "timeline": timeline,
-          "countries": countries,
-          "geo_points": geo_points,
-      }
+        response = {
+        "total_events": int(total_events),
+        "total_attacks": int(total_attacks),
+        "top_ip": str(top_ip),
+        "top_endpoint": str(top_endpoint),
+        "cred_count": int(cred_count),
+        "hourly": hourly,
+        "types": types,
+        "timeline": timeline,
+        "countries": countries,
+        "geo_points": geo_points,
+        }
 
-self.write(json.dumps(response, default=str))
+        self.write(json.dumps(response, default=str))
 
 # ===== Main Dashboard =====
 class DashboardHandler(tornado.web.RequestHandler):
