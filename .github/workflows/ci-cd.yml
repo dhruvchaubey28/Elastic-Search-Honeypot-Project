@@ -52,6 +52,7 @@ jobs:
   # ══════════════════════════════════════════
   security:
     name: 🔒 Security Scan
+    needs : test
     runs-on: ubuntu-latest
     
 
@@ -102,6 +103,7 @@ jobs:
   # ══════════════════════════════════════════
   lint:
     name: 🎨 Code Quality
+    needs : test
     runs-on: ubuntu-latest
     
 
@@ -133,6 +135,7 @@ jobs:
   # ══════════════════════════════════════════
   deploy:
     name: 🚀 Deploy to Render
+    needs : [test,security, lint]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
