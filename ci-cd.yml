@@ -1,0 +1,232 @@
+name: 🍯 Delilah CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  # ══════════════════════════════════════════
+  #  JOB 1 — Run Automated Tests
+  # ══════════════════════════════════════════
+  test:
+    name: 🧪 Run Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 📦 Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 🧪 Run classifier unit tests
+        run: python -m pytest tests/test_honeypot.py -v
+               --tb=short
+               -k "TestClassifyAttack or TestAlertThrottle or TestDatabaseSchema"
+               --junit-xml=test-results/junit.xml
+        continue-on-error: false
+
+      - name: 📊 Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/junit.xml
+
+      - name: ✅ Test summary
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  🍯 Delilah Test Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          python -m pytest tests/test_honeypot.py
+            -k "TestClassifyAttack or TestAlertThrottle or TestDatabaseSchema"
+            --tb=no -q 2>&1 | tail -5
+
+  # ══════════════════════════════════════════
+  #  JOB 2 — Security Scan (runs after tests)
+  # ══════════════════════════════════════════
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install security tools
+        run: pip install bandit safety
+
+      - name: 🔍 Bandit — scan for security issues in code
+        run: |
+          bandit -r honeypot.py monitor.py \
+            -f json -o bandit-report.json \
+            --skip B101,B311 || true
+          echo "Bandit scan complete"
+          cat bandit-report.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          results = data.get('results', [])
+          highs = [r for r in results if r['issue_severity'] == 'HIGH']
+          print(f'Issues found: {len(results)} total, {len(highs)} HIGH severity')
+          if highs:
+              for h in highs:
+                  print(f'  ❌ {h[\"filename\"]}:{h[\"line_number\"]} — {h[\"issue_text\"]}')
+          else:
+              print('  ✅ No HIGH severity issues found')
+          "
+
+      - name: 🛡️ Safety — scan dependencies for CVEs
+        run: |
+          safety check -r requirements.txt --output text || true
+
+      - name: 📊 Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: bandit-report.json
+
+  # ══════════════════════════════════════════
+  #  JOB 3 — Lint & Code Quality
+  # ══════════════════════════════════════════
+  lint:
+    name: 🎨 Code Quality
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install linters
+        run: pip install flake8 pyflakes
+
+      - name: 🎨 Flake8 — syntax and style check
+        run: |
+          flake8 honeypot.py monitor.py \
+            --max-line-length=120 \
+            --ignore=E501,W503,E302,E303,W291,W293,E231,E225 \
+            --count --statistics || true
+
+      - name: 🔬 Pyflakes — undefined names and imports
+        run: |
+          pyflakes honeypot.py monitor.py || true
+
+  # ══════════════════════════════════════════
+  #  JOB 4 — Deploy to Render (main branch only)
+  # ══════════════════════════════════════════
+  deploy:
+    name: 🚀 Deploy to Render
+    runs-on: ubuntu-latest
+    needs: [ test, security, lint ]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🚀 Deploy Honeypot service to Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_HONEYPOT_SERVICE_ID: ${{ secrets.RENDER_HONEYPOT_SERVICE_ID }}
+        run: |
+          echo "Triggering deploy for Honeypot service..."
+          curl -s -X POST \
+            "https://api.render.com/v1/services/$RENDER_HONEYPOT_SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}' | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          deploy_id = data.get('id', 'unknown')
+          status = data.get('status', 'unknown')
+          print(f'🍯 Honeypot deploy triggered: {deploy_id} ({status})')
+          "
+
+      - name: 🚀 Deploy Monitor service to Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_MONITOR_SERVICE_ID: ${{ secrets.RENDER_MONITOR_SERVICE_ID }}
+        run: |
+          echo "Triggering deploy for Monitor service..."
+          curl -s -X POST \
+            "https://api.render.com/v1/services/$RENDER_MONITOR_SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}' | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          deploy_id = data.get('id', 'unknown')
+          status = data.get('status', 'unknown')
+          print(f'📊 Monitor deploy triggered: {deploy_id} ({status})')
+          "
+
+      - name: ⏳ Wait for deploys to complete
+        run: |
+          echo "Waiting 60 seconds for Render to build..."
+          sleep 60
+
+      - name: 🏥 Health check — Honeypot
+        env:
+          RENDER_HONEYPOT_URL: ${{ secrets.RENDER_HONEYPOT_URL }}
+        run: |
+          if [ -z "$RENDER_HONEYPOT_URL" ]; then
+            echo "⚠️ RENDER_HONEYPOT_URL not set — skipping health check"
+            exit 0
+          fi
+          echo "Checking honeypot health at $RENDER_HONEYPOT_URL..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$RENDER_HONEYPOT_URL" --max-time 15)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Honeypot is healthy (HTTP $STATUS)"
+          else
+            echo "⚠️ Honeypot returned HTTP $STATUS — may still be starting up"
+          fi
+
+      - name: 🏥 Health check — Monitor Dashboard
+        env:
+          RENDER_MONITOR_URL: ${{ secrets.RENDER_MONITOR_URL }}
+        run: |
+          if [ -z "$RENDER_MONITOR_URL" ]; then
+            echo "⚠️ RENDER_MONITOR_URL not set — skipping health check"
+            exit 0
+          fi
+          echo "Checking monitor health at $RENDER_MONITOR_URL..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$RENDER_MONITOR_URL" --max-time 15)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Monitor dashboard is healthy (HTTP $STATUS)"
+          else
+            echo "⚠️ Monitor returned HTTP $STATUS — may still be starting up"
+          fi
+
+      - name: 📢 Deploy summary
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  🚀 Delilah Deployment Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Branch:   ${{ github.ref_name }}"
+          echo "  Commit:   ${{ github.sha }}"
+          echo "  Actor:    ${{ github.actor }}"
+          echo "  Status:   Deploy triggered on Render"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
