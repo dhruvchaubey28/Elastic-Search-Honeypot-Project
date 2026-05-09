@@ -1,7 +1,7 @@
 import tornado.ioloop
 import tornado.web
 import tornado.httpclient
-import sqlite3
+import psycopg2
 import datetime
 import smtplib
 import matplotlib.pyplot as plt
@@ -39,13 +39,15 @@ def should_send_alert(ip):
     return False
 
 # ===== Database Setup =====
-DB_PATH = os.getenv("DB_PATH", "honeypot_logs.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-db_conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+db_conn = psycopg2.connect(DATABASE_URL)
+db_conn.autocommit = True
+
 db_cursor = db_conn.cursor()
 
 db_cursor.execute('''CREATE TABLE IF NOT EXISTS events (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          SERIAL PRIMARY KEY,
     timestamp   TEXT,
     source_ip   TEXT,
     event_type  TEXT,
@@ -63,7 +65,7 @@ db_cursor.execute('''CREATE TABLE IF NOT EXISTS events (
 )''')
 
 db_cursor.execute('''CREATE TABLE IF NOT EXISTS harvested_credentials (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          SERIAL PRIMARY KEY,
     timestamp   TEXT,
     source_ip   TEXT,
     username    TEXT,
@@ -110,7 +112,7 @@ async def log_event(source_ip, event_type, request_uri, user_agent,
         INSERT INTO events
         (timestamp, source_ip, event_type, request_uri, method, post_body,
          user_agent, country, region, city, isp, org, lat, lon)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
         timestamp, source_ip, event_type, request_uri, method, post_body,
         user_agent,
@@ -126,68 +128,14 @@ async def log_event(source_ip, event_type, request_uri, user_agent,
     return geo
 
 # ===== Graph Generation =====
+"""
 def generate_attack_graphs():
     graphs = {}
 
-    # 1. Hourly Attack Frequency (last 24h)
-    db_cursor.execute("""
-        SELECT strftime('%H', timestamp) as hour, COUNT(*) as count
-        FROM events
-        WHERE timestamp > datetime('now', '-24 hours')
-        AND event_type LIKE '%Attack%'
-        GROUP BY hour ORDER BY hour
-    """)
-    hourly_data = db_cursor.fetchall()
-    if hourly_data:
-        hours, counts = zip(*hourly_data)
-        plt.figure(figsize=(8, 4))
-        plt.bar(hours, counts, color="red")
-        plt.title("Attacks Per Hour (Last 24h)")
-        plt.xlabel("Hour of Day")
-        plt.ylabel("Attack Count")
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", bbox_inches="tight")
-        graphs["hourly"] = buf.getvalue()
-        plt.close()
 
-    # 2. Attack Type Distribution (last 7 days)
-    db_cursor.execute("""
-        SELECT event_type, COUNT(*) as count
-        FROM events
-        WHERE timestamp > datetime('now', '-7 days')
-        GROUP BY event_type ORDER BY count DESC LIMIT 5
-    """)
-    type_data = db_cursor.fetchall()
-    if type_data:
-        types, counts = zip(*type_data)
-        plt.figure(figsize=(8, 4))
-        plt.pie(counts, labels=types, autopct="%1.1f%%")
-        plt.title("Attack Type Distribution (Last 7 Days)")
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", bbox_inches="tight")
-        graphs["types"] = buf.getvalue()
-        plt.close()
-
-    # 3. Top Attacker IPs (last 7 days)
-    db_cursor.execute("""
-        SELECT source_ip, COUNT(*) as count
-        FROM events
-        WHERE timestamp > datetime('now', '-7 days')
-        GROUP BY source_ip ORDER BY count DESC LIMIT 5
-    """)
-    ip_data = db_cursor.fetchall()
-    if ip_data:
-        ips, counts = zip(*ip_data)
-        plt.figure(figsize=(8, 4))
-        plt.barh(ips, counts, color="orange")
-        plt.title("Top Attackers by IP (Last 7 Days)")
-        plt.xlabel("Attack Count")
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", bbox_inches="tight")
-        graphs["attackers"] = buf.getvalue()
-        plt.close()
-
-    return graphs
+    return graphs 
+    
+"""
 
 # ===== Email Alert =====
 def send_alert(source_ip, request_uri, user_agent, geo, method="GET", post_body=None):
@@ -276,7 +224,7 @@ def get_attack_summary():
                GROUP_CONCAT(DISTINCT event_type) as attack_types,
                COUNT(*) / 24 as attack_frequency
         FROM events
-        WHERE timestamp > ? AND event_type LIKE '%Attack%'
+        WHERE timestamp > %s AND event_type LIKE '%Attack%'
     """, (threshold,))
     stats = db_cursor.fetchone()
 
@@ -496,7 +444,7 @@ class FakeLoginHandler(tornado.web.RequestHandler):
         db_cursor.execute("""
             INSERT INTO harvested_credentials
             (timestamp, source_ip, username, password, endpoint, user_agent, country, city)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             timestamp, ip, username, password,
             self.request.uri, ua,

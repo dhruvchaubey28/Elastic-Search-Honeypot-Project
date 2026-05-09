@@ -1,6 +1,6 @@
 import tornado.ioloop
 import tornado.web
-import sqlite3
+import psycopg2
 import json
 import csv
 import io
@@ -10,8 +10,11 @@ from dotenv import load_dotenv
 load_dotenv()
 MONITOR_PORT = int(os.environ.get("PORT", 8080))
 
-DB_PATH = os.getenv("DB_PATH", "honeypot_logs.db")
-db_conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+db_conn = psycopg2.connect(DATABASE_URL)
+db_conn.autocommit = True
+
 db_cursor = db_conn.cursor()
 
 # ===== CSV Export =====
@@ -61,10 +64,12 @@ class StatsHandler(tornado.web.RequestHandler):
 
         # Hourly (last 24h)
         db_cursor.execute("""
-            SELECT strftime('%H', timestamp) as hour, COUNT(*) as count
-            FROM events WHERE timestamp > datetime('now', '-24 hours')
-            GROUP BY hour ORDER BY hour
-        """)
+    SELECT EXTRACT(HOUR FROM timestamp) as hour, COUNT(*) as count
+    FROM events
+    WHERE timestamp > NOW() - INTERVAL '24 hours'
+    GROUP BY hour
+    ORDER BY hour
+""")
         hourly = [{"hour": r[0], "count": r[1]} for r in db_cursor.fetchall()]
 
         # Event types
@@ -76,11 +81,12 @@ class StatsHandler(tornado.web.RequestHandler):
 
         # 7-day timeline (attacks per day)
         db_cursor.execute("""
-            SELECT strftime('%Y-%m-%d', timestamp) as day, COUNT(*) as count
-            FROM events
-            WHERE timestamp > datetime('now', '-7 days')
-            GROUP BY day ORDER BY day
-        """)
+    SELECT DATE(timestamp) as day, COUNT(*) as count
+    FROM events
+    WHERE timestamp > NOW() - INTERVAL '7 days'
+    GROUP BY day
+    ORDER BY day
+""")
         timeline = [{"day": r[0], "count": r[1]} for r in db_cursor.fetchall()]
 
         # Top countries
