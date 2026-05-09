@@ -70,14 +70,14 @@ class StatsHandler(tornado.web.RequestHandler):
     GROUP BY hour
     ORDER BY hour
 """)
-        hourly = [{"hour": r[0], "count": r[1]} for r in db_cursor.fetchall()]
+        hourly = [{"hour": int(r[0]), "count": int(r[1])} for r in db_cursor.fetchall()]
 
         # Event types
         db_cursor.execute("""
             SELECT event_type, COUNT(*) as count FROM events
             GROUP BY event_type ORDER BY count DESC LIMIT 8
         """)
-        types = [{"type": r[0], "count": r[1]} for r in db_cursor.fetchall()]
+        types = [{"type": r[0], "count": int(r[1])} for r in db_cursor.fetchall()]
 
         # 7-day timeline (attacks per day)
         # 7-day timeline
@@ -89,8 +89,7 @@ class StatsHandler(tornado.web.RequestHandler):
             GROUP BY day
             ORDER BY day
 """)
-        timeline = [{"day": r[0], "count": r[1]} for r in db_cursor.fetchall()]
-
+        timeline = [{"day": str(r[0]), "count": int(r[1])} for r in db_cursor.fetchall()]
         # Top countries
         db_cursor.execute("""
             SELECT country, COUNT(*) as count FROM events
