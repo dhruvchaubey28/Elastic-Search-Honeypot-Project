@@ -134,7 +134,7 @@ class StatsHandler(tornado.web.RequestHandler):
 class DashboardHandler(tornado.web.RequestHandler):
     def get(self):
         db_cursor.execute("""
-            SELECT id, timestamp, source_ip, event_type, method,
+            SELECT id, CAST(timestamp AS TIMESTAMP) AT TIME ZONE 'Asia/Kolkata' as timestamp, source_ip, event_type, method,
                    request_uri, user_agent, country, region, city, isp
             FROM events ORDER BY timestamp DESC LIMIT 1000
         """)
